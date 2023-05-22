@@ -13,8 +13,7 @@
 // void *arg
 // );
 
-list <pthread_t*> *thread_list;
-int thread_num;
+pthread_t *thread_list;
 
 struct JobContext
     {
@@ -24,9 +23,8 @@ struct JobContext
     OutputVec &outputVec;
     std::vector<IntermediateVec> our_queue;
     IntermediateVec *thread_intermediate_vecs;
-    int thread_index;
     int num_of_vecs;
-    stage_t state;
+    JobState state;
 };
 
 
@@ -34,69 +32,73 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
                             const InputVec& inputVec, OutputVec& outputVec,
                             int multiThreadLevel)
 {
+
+  if (multiThreadLevel < 1)
+  {
+    fprintf (stderr, "Error: multithread level %d is illegal.\n", multiThreadLevel);
+    exit (-1);
+  }
+
   std::atomic<uint64_t> atomic_counter(0);
   JobContext *context;
   context->atomic_counter(&atomic_counter)
   context->inputVec(&inputVec)
   context->client(&client)
   context->outputVec(&outputVec)
-  if (multiThreadLevel < 1)
-  {
-    fprintf (stderr, "Error: multithread level %d is illegal.\n", multiThreadLevel);
-    exit (-1);
-  }
-  thread_num = multiThreadLevel
+  context->num_of_vecs(multiThreadLevel)
+  context->state({UNDEFINED_STAGE,0})
+  thread_list = new pthread_t[multiThreadLevel];
 
-  for (auto const &thread: *thread_list)
+  for (int i = 1; i < multiThreadLevel; i++)
   {
-    if (0 != pthread_create (&thread, nullptr, run_thread,
-                             static_cast<void *>(&context)))
+    if (0 != pthread_create (&thread_list[i], nullptr, run_thread,
+                             static_cast<void *>(context)))
     {
       fprintf (stderr, "Error: Failure to spawn new thread in run.\n");
       exit (-1);
     }
   }
+
+  return context;
 }
 
-void waitForJob(JobHandle job)
-{
-
-}
 
 void getJobState(JobHandle job, JobState* state)
 {
-  state->stage=static_cast<JobContext*>(job)->state;
+  state = static_cast<JobContext*>(job)->state;
 }
-void closeJobHandle(JobHandle job);
 
 
+void closeJobHandle(JobHandle job)
+{
 
+}
 
 
 void waitForJob(JobHandle job)
 {
-  if (0 != pthread_join(threads[t_index], NULL))
+  for (int i = 1; i < multiThreadLevel; i++)
   {
-    fprintf(stderr, "Error: Failure to join threads in run.\n");
-    exit(-1);
+    if (0 != pthread_join(thread_list[i], NULL))
+    {
+      fprintf(stderr, "Error: Failure to join threads in run.\n");
+      exit(-1);
+    }
   }
 }
 
 
-void getJobState(JobHandle job, JobState* state)
-{
-
-}
-
-
-void * run_thread() {
+void * run_thread(void * context) {
 
   /************************************************
    *                  MAP PHASE                   *
    ************************************************/
+  auto context = static_cast<JobContext*> (context);
+  context->state.stage = MAP_STAGE;
 
   unsigned long old_value = 0;
-  while(old_value < context->context) {
+  while(old_value < context->inputVec.length())
+  {
     context->client.map( context->inputVec[old_value].first,
                          context->inputVec[old_value].second,
                          context);
@@ -104,8 +106,14 @@ void * run_thread() {
     uint64_t value = atomic_counter.load();
     value += (1ULL << 33);
     atomic_counter.store(value);
-
   }
+  //emits to emit2 by itself, only implement emit2, so it'll work and update
+  // the output vec (intermediate vector)
+  // update the progress - emit or here?
+
+  /************************************************
+   *                  SORT PHASE                   *
+   ************************************************/
 
   // My intermediate vector assumed to be populated at this point
   // Sorting Stage - No mutually shared objects
