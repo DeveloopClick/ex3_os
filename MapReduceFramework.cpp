@@ -3,6 +3,8 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
+#include "Barrier/Barrier.h"
 
 pthread_t *threads_list;
 
@@ -19,13 +21,14 @@ struct JobContext
     JobState state;
     pthread_mutex_t shuffleMutex;
     pthread_mutex_t outVecMutex;
+    Barrier barrier;
 
 };
 
 struct WrappedContext
 {
     JobContext *context;
-    int thread_ind;
+    int current_thread_ind;
 };
 
 JobHandle startMapReduceJob (const MapReduceClient &client,
@@ -122,7 +125,7 @@ void *run_job (WrappedContext *wrapped_context)
   /************************************************
    *                  MAP PHASE                   *
    ************************************************/
-  int thread_ind = static_cast<WrappedContext *> (wrapped_context)->thread_ind;
+  int thread_ind = static_cast<WrappedContext *> (wrapped_context)->current_thread_ind;
   JobContext *context = static_cast<WrappedContext *> (wrapped_context)->context;
 
   context->state.stage = MAP_STAGE;
