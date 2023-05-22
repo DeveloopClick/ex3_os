@@ -1,5 +1,6 @@
 #include <pthread.h>
-
+#include "MapReduceFramework.h"
+#include "JobContext.h"
 
 
 //list<Thread *> *thread_list;
@@ -14,5 +15,8 @@
 
 
 void waitForJob(JobHandle job);
-void getJobState(JobHandle job, JobState* state);
+void getJobState(JobHandle job, JobState* state)
+{
+  state->stage=static_cast<JobContext*>(job)->state;
+}
 void closeJobHandle(JobHandle job);
