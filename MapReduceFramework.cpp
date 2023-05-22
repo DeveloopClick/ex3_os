@@ -5,25 +5,10 @@
 #include <cstdlib>
 #include <algorithm>
 #include "Barrier/Barrier.h"
+#include "JobContext.h"
 
 pthread_t *threads_list;
-
-struct JobContext
-{
-    std::atomic<unsigned long> map_atomic_counter;
-    const InputVec &inputVec;
-    const MapReduceClient &client;
-    OutputVec &outputVec;
-    std::vector<IntermediateVec> our_queue;
-    IntermediateVec *thread_intermediate_vecs;
-    int thread_index;
-    int num_of_intermediate_vecs;
-    JobState state;
-    pthread_mutex_t shuffleMutex;
-    pthread_mutex_t outVecMutex;
-    Barrier barrier;
-
-};
+int flag_wait=0;
 
 struct WrappedContext
 {
@@ -36,19 +21,14 @@ JobHandle startMapReduceJob (const MapReduceClient &client,
                              int multiThreadLevel)
 {
 
-  if (multiThreadLevel < 1)
-  {
-    fprintf (stderr, "Error: multithread level %d is illegal.\n", multiThreadLevel);
-    exit (1);
-  }
+//  if (multiThreadLevel < 1)
+//  {
+//    fprintf (stderr, "Error: multithread level %d is illegal.\n", multiThreadLevel);
+//    exit (1);
+//  }
 
-  JobContext *context;
-  context->map_atomic_counter(0);
-  context->inputVec (&inputVec);
-  context->client (client);
-  context->outputVec (&outputVec);
-  context->num_of_intermediate_vecs =multiThreadLevel;
-  context->state =JobState {UNDEFINED_STAGE, 0};
+  JobContext *context=new JobContext(client,inputVec,outputVec,multiThreadLevel);
+
   threads_list = new pthread_t[multiThreadLevel];
 
   WrappedContext context_vec[multiThreadLevel];
@@ -63,7 +43,7 @@ JobHandle startMapReduceJob (const MapReduceClient &client,
                              static_cast<void *>(&context_vec[i])))
     {
       fprintf (stderr, "Error: Failure to spawn new thread in run.\n");
-      exit (-1);
+      exit (1);
     }
   }
   return context;
@@ -75,21 +55,30 @@ void getJobState (JobHandle job, JobState *state)
   JobState current_state = static_cast<JobContext *>(job)->state;
   state->stage = current_state.stage;
 }
-void closeJobHandle (JobHandle job);
+void closeJobHandle (JobHandle job)
+{
+  auto context = static_cast<JobContext *>(job);
+  delete context;
+  delete [] threads_list;
+}
+
 
 void waitForJob (JobHandle job)
 {
-  if (0 != pthread_join (threads_list[t_index], NULL))
-    for (int i = 1; i < multiThreadLevel; i++)
+  if (flag_wait==1)
+  {
+    return;
+  }
+  auto context = static_cast<JobContext *>(job);
+  for (int i = 1; i < context->num_of_intermediate_vecs; i++)
+  {
+    if (0 != pthread_join (threads_list[i], NULL))
     {
       fprintf (stderr, "Error: Failure to join threads in run.\n");
-      exit (-1);
+      exit (1);
     }
-  if (0 != pthread_join (threads_list[i], NULL))
-  {
-    fprintf (stderr, "Error: Failure to join threads in run.\n");
-    exit (-1);
   }
+  flag_wait=1;
 }
 
 void emit2 (K2 *key, V2 *value, void *context)

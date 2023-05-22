@@ -9,30 +9,33 @@
 #include "MapReduceFramework.h"
 #include <atomic>
 #include <vector>
-#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <pthread.h>
 
-//class JobContext
-//{
-//
-//  struct BitPartition
-//  {
-//      std::uint64_t state: 2;
-//      std::uint64_t processed_keys: 31;
-//      std::uint64_t total_keys: 31;
-//  };
-//  const InputVec &inputVec;
-//  const MapReduceClient &client;
-//  OutputVec &outputVec;
-//  std::vector<IntermediateVec> our_queue;
-//  IntermediateVec *thread_intermediate_vecs;
-//  std::atomic<BitPartition> multi_purpose_counter;
-//  int thread_index;
-//  int num_of_vecs;
-//  stage_t state;
-//  JobContext (const MapReduceClient &client,
-//              const InputVec &inputVec, OutputVec &outputVec,
-//              int multiThreadLevel);
-//  ~JobContext ();
-//
-//};
+class JobContext
+{
+ public:
+
+  std::atomic<unsigned long> map_atomic_counter;
+  std::atomic<unsigned long> shuffle_atomic_counter;
+  std::atomic<unsigned long> reduce_atomic_counter;
+
+  const InputVec &inputVec;
+  const MapReduceClient &client;
+  OutputVec &outputVec;
+  std::vector<IntermediateVec> our_queue;
+  IntermediateVec *thread_intermediate_vecs;
+  int thread_index;
+  int num_of_intermediate_vecs;
+  JobState state;
+  pthread_mutex_t shuffleMutex;
+  pthread_mutex_t outVecMutex;
+  Barrier barrier;
+  JobContext (const MapReduceClient &client,
+              const InputVec &inputVec, OutputVec &outputVec,
+              int multiThreadLevel);
+  ~JobContext ();
+
+};
 #endif //_JOB_CONTEXT_H_
