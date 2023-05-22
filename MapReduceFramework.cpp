@@ -1,35 +1,28 @@
 #include <pthread.h>
 #include "MapReduceFramework.h"
-#include "JobContext.h"
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 
-
-//list<Thread *> *thread_list;
-
-//int pthread_create
-//(
-// pthread_t *thread,
-// const pthread_attr_t *attr=NULL,
-// void *(*start_routine) (void*),
-// void *arg
-// );
-
-pthread_t *thread_list;
+pthread_t *threads_list;
 
 struct JobContext
 {
-    std::atomic <int> map_atomic_counter;
-    std::atomic <int> shuffle_atomic_counter;
-    std::atomic <int> reduce_atomic_counter;
+    std::atomic<unsigned long> map_atomic_counter;
     const InputVec &inputVec;
     const MapReduceClient &client;
     OutputVec &outputVec;
-    std::vector <IntermediateVec> our_queue;
+    std::vector<IntermediateVec> our_queue;
     IntermediateVec *thread_intermediate_vecs;
-    int num_of_vecs;
+    int thread_index;
+    int num_of_intermediate_vecs;
     JobState state;
+    pthread_mutex_t shuffleMutex;
+    pthread_mutex_t outVecMutex;
+
 };
 
-struct ThreadContext
+struct WrappedContext
 {
     JobContext *context;
     int thread_ind;
@@ -43,79 +36,105 @@ JobHandle startMapReduceJob (const MapReduceClient &client,
   if (multiThreadLevel < 1)
   {
     fprintf (stderr, "Error: multithread level %d is illegal.\n", multiThreadLevel);
-    exit (-1);
+    exit (1);
   }
 
   JobContext *context;
-  context->map_atomic_counter.store(0);
+  context->map_atomic_counter(0);
   context->inputVec (&inputVec);
-  context->client (&client);
+  context->client (client);
   context->outputVec (&outputVec);
-  context->num_of_vecs (multiThreadLevel);
-  context->state ({UNDEFINED_STAGE, 0});
-  thread_list = new pthread_t[multiThreadLevel];
+  context->num_of_intermediate_vecs =multiThreadLevel;
+  context->state =JobState {UNDEFINED_STAGE, 0};
+  threads_list = new pthread_t[multiThreadLevel];
 
-  ThreadContext context_vec[multiThreadLevel];
+  WrappedContext context_vec[multiThreadLevel];
   for (int i = 0; i < multiThreadLevel; i++)
   {
-    context_vec[i] = ThreadContext{context, i};
+    context_vec[i] = WrappedContext{context, i};
   }
 
   for (int i = 1; i < multiThreadLevel; i++)
   {
-    if (0 != pthread_create (&thread_list[i], nullptr, run_job,
+    if (0 != pthread_create (&threads_list[i], nullptr, run_job,
                              static_cast<void *>(&context_vec[i])))
     {
       fprintf (stderr, "Error: Failure to spawn new thread in run.\n");
       exit (-1);
     }
   }
-
   return context;
+
 }
 
 void getJobState (JobHandle job, JobState *state)
 {
-  state = static_cast<JobContext *>(job)->state;
+  JobState current_state = static_cast<JobContext *>(job)->state;
+  state->stage = current_state.stage;
 }
-
-void closeJobHandle (JobHandle job)
-{
-
-}
+void closeJobHandle (JobHandle job);
 
 void waitForJob (JobHandle job)
 {
-  for (int i = 1; i < multiThreadLevel; i++)
-  {
-    if (0 != pthread_join (thread_list[i], NULL))
+  if (0 != pthread_join (threads_list[t_index], NULL))
+    for (int i = 1; i < multiThreadLevel; i++)
     {
       fprintf (stderr, "Error: Failure to join threads in run.\n");
       exit (-1);
     }
+  if (0 != pthread_join (threads_list[i], NULL))
+  {
+    fprintf (stderr, "Error: Failure to join threads in run.\n");
+    exit (-1);
   }
 }
 
-void *run_thread (void *thread_context)
+void emit2 (K2 *key, V2 *value, void *context)
+{
+  auto casted_context = static_cast<JobContext *>(context);
+  auto pair = IntermediatePair (key, value);
+  auto index = casted_context->thread_index;
+//     no need for mutex because each thread access it's own vector and only
+//  one thread can access it
+  casted_context->thread_intermediate_vecs[index].push_back (pair);
+}
+
+void emit3 (K3 *key, V3 *value, void *context)
+{
+  auto casted_context = static_cast<JobContext *>(context);
+  auto pair = OutputPair (key, value);
+  if (pthread_mutex_lock (&(casted_context->outVecMutex)) != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
+  }
+  casted_context->outputVec.push_back (pair);
+  if (pthread_mutex_unlock (&(casted_context->outVecMutex)) != 0)
+  {
+    fprintf (stderr, "Error: Failure to unlock the mutex in emit3.\n");
+    exit (1);
+  }
+}
+
+void *run_job (WrappedContext *wrapped_context)
 {
 
   /************************************************
    *                  MAP PHASE                   *
    ************************************************/
-  auto thread_context = static_cast<ThreadContext *> (thread_context);
-  int thread_ind = thread_context->thread_ind;
-  JobContext *context = thread_context->context;
+  int thread_ind = static_cast<WrappedContext *> (wrapped_context)->thread_ind;
+  JobContext *context = static_cast<WrappedContext *> (wrapped_context)->context;
 
   context->state.stage = MAP_STAGE;
 
   unsigned long old_value = 0;
 
-  while ((old_value = context->map_atomic_counter++) < context->inputVec
-  .length())
+  while ((old_value = context->map_atomic_counter++)
+         < context->inputVec.size ())
   {
     context->client.map (context->inputVec[old_value].first,
                          context->inputVec[old_value].second,
-                         thread_context);
+                         context);
 
   }
   //emits to emit2 by itself, only implement emit2, so it'll work and update
@@ -283,9 +302,8 @@ void *run_thread (void *thread_context)
     if (task_num < context->uniqueK2Size)
     {
       context->client.reduce (&job, contextWrapper);
-
     }
   }
-
   return (void *) ErrorCode::SUCCESS;
+}
 }
