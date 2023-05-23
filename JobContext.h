@@ -29,6 +29,7 @@ class JobContext
   int thread_index;
   int num_of_intermediate_vecs;
   JobState state;
+  pthread_mutex_t inVecMutex;
   pthread_mutex_t shuffleMutex;
   pthread_mutex_t outVecMutex;
   Barrier barrier;

@@ -108,6 +108,11 @@ void emit3 (K3 *key, V3 *value, void *context)
   }
 }
 
+bool compare_k2(std::pair<K2 *, V2 *> *pair1,std::pair<K2 *, V2 *> *pair2)
+//check types
+{
+  return pair1->first > pair2->first;
+}
 void *run_job (WrappedContext *wrapped_context)
 {
 
@@ -124,10 +129,19 @@ void *run_job (WrappedContext *wrapped_context)
   while ((old_value = context->map_atomic_counter++)
          < context->inputVec.size ())
   {
+    if (pthread_mutex_lock (&(context->inVecMutex)) != 0)
+    {
+      fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+      exit (1);
+    }
     context->client.map (context->inputVec[old_value].first,
                          context->inputVec[old_value].second,
                          context);
-
+    if (pthread_mutex_unlock (&(context->inVecMutex)) != 0)
+    {
+      fprintf (stderr, "Error: Failure to unlock the mutex in emit3.\n");
+      exit (1);
+    }
   }
   //emits to emit2 by itself, only implement emit2, so it'll work and update
   // the output vec (intermediate vector)
@@ -139,23 +153,24 @@ void *run_job (WrappedContext *wrapped_context)
 
   if (!context->thread_intermediate_vecs[thread_ind].empty ())
   {
-    std::sort (this->thread_intermediate_vecs[].begin (),
-               this->thread_intermediate_vecs.end (), Pair2lessthan);
-
-    // List all unique keys (will be used for shuffle)
-    std::transform (intermedVecs[i].begin (), intermedVecs[i].end (), back_inserter (this->uniqueK2Vecs[i]), [] (IntermediatePair &pair)
-    { return pair.first; });
-    IntermediateUniqueKeysVec::iterator it;
-    it = std::unique (this->uniqueK2Vecs[i].begin (), this->uniqueK2Vecs[i].end (), K2equals);
-    this->uniqueK2Vecs[i].resize ((unsigned long) std::distance (this->uniqueK2Vecs[i].begin (), it));
+    std::sort (context->thread_intermediate_vecs[thread_ind].begin (),
+               context->thread_intermediate_vecs[thread_ind].end (), compare_k2);
   }
+
+//    // List all unique keys (will be used for shuffle)
+//    std::transform (intermedVecs[i].begin (), intermedVecs[i].end (), back_inserter (this->uniqueK2Vecs[i]), [] (IntermediatePair &pair)
+//    { return pair.first; });
+//    IntermediateUniqueKeysVec::iterator it;
+//    it = std::unique (this->uniqueK2Vecs[i].begin (), this->uniqueK2Vecs[i].end (), K2equals);
+//    this->uniqueK2Vecs[i].resize ((unsigned long) std::distance (this->uniqueK2Vecs[i].begin (), it));
+//  }
 
   /************************************************
    *                  BARRIER                     *
    ************************************************/
 
   // Barrier for all threads
-  context->barrier.barrier (threadIndex);
+  context->barrier.barrier();
 
   /************************************************
    *              SHUFFLE \ REDUCE                *
@@ -250,7 +265,26 @@ void *run_job (WrappedContext *wrapped_context)
   /************************************************
    *                  REDUCE                      *
    ************************************************/
+  context->state.stage = REDUCE_STAGE;
 
+  old_value = 0;
+
+  while ((old_value = context->reduce_atomic_counter++)
+         < context->our_queue.size())
+  {
+    if (pthread_mutex_lock (&(context->outVecMutex)) != 0)
+    {
+      fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+      exit (1);
+    }
+    context->client.reduce(&context->our_queue[old_value],
+                         context);
+    if (pthread_mutex_unlock (&(context->inVecMutex)) != 0)
+    {
+      fprintf (stderr, "Error: Failure to unlock the mutex in emit3.\n");
+      exit (1);
+    }
+  }
   // All threads continue here. ShuffleLocked represents the shuffler is still working
   unsigned long task_num = 0;
   while (true)
