@@ -34,6 +34,7 @@ class JobContext
   pthread_mutex_t outVecMutex;
   int first_to_shuffle;
   Barrier barrier;
+  ShuffleBarrier shuffle_barrier;
   JobContext (const MapReduceClient &client,
               const InputVec &inputVec, OutputVec &outputVec,
               int multiThreadLevel);
