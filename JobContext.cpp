@@ -5,10 +5,16 @@ JobContext::JobContext (const MapReduceClient &client,
                         int multiThreadLevel)
     : client (client), inputVec (inputVec),
       outputVec (outputVec), num_of_intermediate_vecs (multiThreadLevel),
-      map_atomic_counter (0), shuffle_atomic_counter (0),
-      reduce_atomic_counter (0), state (JobState{UNDEFINED_STAGE,
-                                                 0}), inVecMutex (PTHREAD_MUTEX_INITIALIZER), shuffleMutex (PTHREAD_MUTEX_INITIALIZER), outVecMutex
-          (PTHREAD_MUTEX_INITIALIZER), barrier (multiThreadLevel), first_to_shuffle (0)
+      map_atomic_counter (0),
+      reduce_atomic_counter (0),
+      state (JobState{UNDEFINED_STAGE,0}),
+      inVecMutex (PTHREAD_MUTEX_INITIALIZER),
+      shuffleMutex (PTHREAD_MUTEX_INITIALIZER),
+      outVecMutex(PTHREAD_MUTEX_INITIALIZER),
+      barrier (multiThreadLevel),
+      first_to_map (0),
+      first_to_shuffle (0),
+      first_to_reduce (0)
 {
 
 }
@@ -30,7 +36,7 @@ JobContext::~JobContext ()
     fprintf (stderr, "error on pthread_mutex_destroy");
     exit (1);
   }
-  delete[]thread_intermediate_vecs;
+  delete[] thread_intermediate_vecs;
 
 }
 
