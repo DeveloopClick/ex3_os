@@ -178,31 +178,36 @@ void *run_job (WrappedContext *wrapped_context)
   if (first == 0)
   {
 
-    if (pthread_mutex_lock(&mutex) != 0){
+    pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
+    int count = 0;
+    // lock for the rest of the threads
+    if (pthread_mutex_lock(&context->shuffleMutex) != 0){
       fprintf(stderr, "[[ShuffleBarrier]] error on pthread_mutex_lock");
       exit(1);
     }
-    if (++count < numThreads) {
-      if (pthread_cond_wait(&cv, &mutex) != 0){
+    if (++count < context->num_of_intermediate_vecs) {
+      if (pthread_cond_wait(&cv, &context->shuffleMutex) != 0){
         fprintf(stderr, "[[ShuffleBarrier]] error on pthread_cond_wait");
         exit(1);
       }
-    } else {
-  // MAKE SO ONLY ONE CONTINUES
-  while(!context->thread_intermediate_vecs->empty())
-  {
-    int max_ind = 0;
-    auto vec_of_max_pair = IntermediateVec
-        (context->thread_intermediate_vecs[0]);
-    for (int i = 0; i < context->thread_intermediate_vecs->size(); ++i)
+    } else
     {
-      auto vec = IntermediateVec(context->thread_intermediate_vecs[i]);
-      if (*(vec_of_max_pair.back().first) < *(vec.back().first))
+      count = 0;
+      // MAKE SO ONLY ONE CONTINUES
+      while(!context->thread_intermediate_vecs->empty())
       {
-        vec_of_max_pair = vec;
-        max_ind = i;
-      }
-    }
+        int max_ind = 0;
+        auto vec_of_max_pair = IntermediateVec
+            (context->thread_intermediate_vecs[0]);
+        for (int i = 0; i < context->thread_intermediate_vecs->size(); ++i)
+        {
+          auto vec = IntermediateVec(context->thread_intermediate_vecs[i]);
+          if (*(vec_of_max_pair.back().first) < *(vec.back().first))
+          {
+            vec_of_max_pair = vec;
+            max_ind = i;
+          }
+        }
 
         IntermediateVec s_vec = IntermediateVec();  // TODO: free
         s_vec.push_back(vec_of_max_pair.back());
@@ -226,21 +231,16 @@ void *run_job (WrappedContext *wrapped_context)
           }
         }
         context->our_queue.push_back(s_vec);
-  }
-
+      }
       if (pthread_cond_broadcast(&cv) != 0) {
         fprintf(stderr, "[[ShuffleBarrier]] error on pthread_cond_broadcast");
         exit(1);
       }
     }
-    if (pthread_mutex_unlock(&mutex) != 0) {
+    if (pthread_mutex_unlock(&context->shuffleMutex) != 0) {
       fprintf(stderr, "[[ShuffleBarrier]] error on pthread_mutex_unlock");
       exit(1);
     }
-
-
-
-
 
   /************************************************
    *                  REDUCE                      *
