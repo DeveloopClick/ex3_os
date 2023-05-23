@@ -179,46 +179,72 @@ void *run_job (WrappedContext *wrapped_context)
   {
 
     // lock for the rest of the threads
-    context->shuffleState = ShuffleState::IN_SHUFFLE;
+    context->barrier.barrier();
 
-  // MAKE SO ONLY ONE CONTINUES
-  while(!thread_intermediate_vecs.empty())
-  {
-    int max_ind = 0;
-    auto vec_of_max_pair = thread_intermediate_vecs[0];
-    for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
-    {
-      auto vec = thread_intermediate_vecs[i];
-      if (vec.back() != NULL && vec_of_max_pair.back().first() < vec.back().first())
-      {
-        vec_of_max_pair = vec;
-        max_ind = i;
+
+    if (pthread_mutex_lock(&mutex) != 0){
+      fprintf(stderr, "[[ShuffleBarrier]] error on pthread_mutex_lock");
+      exit(1);
+    }
+    if (++count < numThreads) {
+      if (pthread_cond_wait(&cv, &mutex) != 0){
+        fprintf(stderr, "[[ShuffleBarrier]] error on pthread_cond_wait");
+        exit(1);
       }
-    }
+    } else {
 
-    IntermediateVec s_vec = IntermediateVec();  // TODO: free
-    vec.push_back(vec_of_max_pair.back());
-    vec_of_max_pair.pop_back();
-    if(vec_of_max_pair.empty())
-    {
-      //remove from thread_intermediate_vecs the ind of max_ind
-    }
-
-    for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
-    {
-      auto vec = thread_intermediate_vecs[i];
-      if (vec.back() != NULL && s_vec.back().first() == vec.back().first())
+      // MAKE SO ONLY ONE CONTINUES
+      while(!thread_intermediate_vecs.empty())
       {
-        s_vec.push_back(vec.back());
-        vec.pop_back();
-        if(vec.empty())
+        int max_ind = 0;
+        auto vec_of_max_pair = thread_intermediate_vecs[0];
+        for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
         {
-          //remove from thread_intermediate_vecs the current ind
+          auto vec = thread_intermediate_vecs[i];
+          if (vec.back() != NULL && vec_of_max_pair.back().first() < vec.back().first())
+          {
+            vec_of_max_pair = vec;
+            max_ind = i;
+          }
         }
+
+        IntermediateVec s_vec = IntermediateVec();  // TODO: free
+        vec.push_back(vec_of_max_pair.back());
+        vec_of_max_pair.pop_back();
+        if(vec_of_max_pair.empty())
+        {
+          //remove from thread_intermediate_vecs the ind of max_ind
+        }
+
+        for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
+        {
+          auto vec = thread_intermediate_vecs[i];
+          if (vec.back() != NULL && s_vec.back().first() == vec.back().first())
+          {
+            s_vec.push_back(vec.back());
+            vec.pop_back();
+            if(vec.empty())
+            {
+              //remove from thread_intermediate_vecs the current ind
+            }
+          }
+        }
+        our_queue.push_back(s_vec);
+      }
+
+      if (pthread_cond_broadcast(&cv) != 0) {
+        fprintf(stderr, "[[ShuffleBarrier]] error on pthread_cond_broadcast");
+        exit(1);
       }
     }
-    our_queue.push_back(s_vec);
-  }
+    if (pthread_mutex_unlock(&mutex) != 0) {
+      fprintf(stderr, "[[ShuffleBarrier]] error on pthread_mutex_unlock");
+      exit(1);
+    }
+
+
+
+
 
   /************************************************
    *                  REDUCE                      *
