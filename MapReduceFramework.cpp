@@ -174,22 +174,20 @@ void *run_job (WrappedContext *wrapped_context)
    *                  SHUFFLE                     *
    ************************************************/
   // first to retrive 0 (atomically) is crowned shuffler. Long shall he reign!
-  int first = context->shufflerRace++;
+  int first = context->first_to_shuffle++;
   if (first == 0)
   {
 
-    // lock for the rest of the threads
-    context->shuffleState = ShuffleState::IN_SHUFFLE;
 
   // MAKE SO ONLY ONE CONTINUES
-  while(!thread_intermediate_vecs.empty())
+  while(!context->thread_intermediate_vecs->empty())
   {
     int max_ind = 0;
-    auto vec_of_max_pair = thread_intermediate_vecs[0];
-    for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
+    auto vec_of_max_pair = context->thread_intermediate_vecs[0];
+    for (int i = 0; i < context->thread_intermediate_vecs->size(); ++i)
     {
-      auto vec = thread_intermediate_vecs[i];
-      if (vec.back() != NULL && vec_of_max_pair.back().first() < vec.back().first())
+      auto vec = context->thread_intermediate_vecs[i];
+      if (*(vec_of_max_pair.back()).first() < *(vec.back().first()))
       {
         vec_of_max_pair = vec;
         max_ind = i;
@@ -204,7 +202,7 @@ void *run_job (WrappedContext *wrapped_context)
       //remove from thread_intermediate_vecs the ind of max_ind
     }
 
-    for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
+    for (int i = 0; i < contextthread_intermediate_vecs.length(); ++i)
     {
       auto vec = thread_intermediate_vecs[i];
       if (vec.back() != NULL && s_vec.back().first() == vec.back().first())

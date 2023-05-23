@@ -12,11 +12,12 @@ Barrier::Barrier(int numThreads)
 
 Barrier::~Barrier()
 {
-	if (pthread_mutex_destroy(&mutex) != 0) {
+	if (pthread_mutex_destroy(&mutex) != 0){
 		fprintf(stderr, "[[Barrier]] error on pthread_mutex_destroy");
 		exit(1);
 	}
-	if (pthread_cond_destroy(&cv) != 0){
+	if (pthread_cond_destroy(&cv) != 0)
+    {
 		fprintf(stderr, "[[Barrier]] error on pthread_cond_destroy");
 		exit(1);
 	}
