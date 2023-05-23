@@ -178,11 +178,6 @@ void *run_job (WrappedContext *wrapped_context)
   if (first == 0)
   {
 
-
-    // lock for the rest of the threads
-    context->barrier.barrier();
-
-
     if (pthread_mutex_lock(&mutex) != 0){
       fprintf(stderr, "[[ShuffleBarrier]] error on pthread_mutex_lock");
       exit(1);
@@ -197,11 +192,12 @@ void *run_job (WrappedContext *wrapped_context)
   while(!context->thread_intermediate_vecs->empty())
   {
     int max_ind = 0;
-    auto vec_of_max_pair = context->thread_intermediate_vecs[0];
+    auto vec_of_max_pair = IntermediateVec
+        (context->thread_intermediate_vecs[0]);
     for (int i = 0; i < context->thread_intermediate_vecs->size(); ++i)
     {
-      auto vec = context->thread_intermediate_vecs[i];
-      if (*(vec_of_max_pair.back()).first() < *(vec.back().first()))
+      auto vec = IntermediateVec(context->thread_intermediate_vecs[i]);
+      if (*(vec_of_max_pair.back().first) < *(vec.back().first))
       {
         vec_of_max_pair = vec;
         max_ind = i;
@@ -209,28 +205,28 @@ void *run_job (WrappedContext *wrapped_context)
     }
 
         IntermediateVec s_vec = IntermediateVec();  // TODO: free
-        vec.push_back(vec_of_max_pair.back());
+        s_vec.push_back(vec_of_max_pair.back());
         vec_of_max_pair.pop_back();
         if(vec_of_max_pair.empty())
         {
           //remove from thread_intermediate_vecs the ind of max_ind
         }
 
-        for (int i = 0; i < thread_intermediate_vecs.length(); ++i)
+        for (int i = 0; i < context->thread_intermediate_vecs->size(); ++i)
         {
-          auto vec = thread_intermediate_vecs[i];
-          if (vec.back() != NULL && s_vec.back().first() == vec.back().first())
+          auto vec = context->thread_intermediate_vecs[i];
+          if (vec.empty() && compare_k2(s_vec.back(),vec.back()))
           {
             s_vec.push_back(vec.back());
-            vec.pop_back();
+            s_vec.pop_back();
             if(vec.empty())
             {
               //remove from thread_intermediate_vecs the current ind
             }
           }
         }
-        our_queue.push_back(s_vec);
-      }
+        context->our_queue.push_back(s_vec);
+  }
 
       if (pthread_cond_broadcast(&cv) != 0) {
         fprintf(stderr, "[[ShuffleBarrier]] error on pthread_cond_broadcast");

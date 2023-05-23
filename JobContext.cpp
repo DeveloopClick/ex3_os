@@ -6,9 +6,9 @@ JobContext::JobContext (const MapReduceClient &client,
     : client (client), inputVec (inputVec),
       outputVec (outputVec), num_of_intermediate_vecs (multiThreadLevel),
       map_atomic_counter (0), shuffle_atomic_counter (0),
-      reduce_atomic_counter (0), state (JobState{UNDEFINED_STAGE, 0}), inVecMutex (PTHREAD_MUTEX_INITIALIZER)
-      ,shuffleMutex (PTHREAD_MUTEX_INITIALIZER), outVecMutex
-      (PTHREAD_MUTEX_INITIALIZER),barrier(multiThreadLevel),first_to_shuffle(0)
+      reduce_atomic_counter (0), state (JobState{UNDEFINED_STAGE,
+                                                 0}), inVecMutex (PTHREAD_MUTEX_INITIALIZER), shuffleMutex (PTHREAD_MUTEX_INITIALIZER), outVecMutex
+          (PTHREAD_MUTEX_INITIALIZER), barrier (multiThreadLevel), first_to_shuffle (0)
 {
 
 }
