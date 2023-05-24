@@ -1,13 +1,10 @@
-#include <pthread.h>
 #include "MapReduceFramework.h"
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
-#include "Barrier/Barrier.h"
 #include "JobContext.h"
 #include <cmath>
-#include <iostream>
-#include <unistd.h>
+#include <pthread.h>
 
 pthread_t *threads_list;
 int flag_wait = 0;
@@ -32,7 +29,7 @@ JobHandle startMapReduceJob (const MapReduceClient &client,
 
   auto *context = new JobContext (client, inputVec, outputVec, multiThreadLevel);
   threads_list = new pthread_t[multiThreadLevel];
-  WrappedContext *context_vec = new WrappedContext[multiThreadLevel];
+  auto *context_vec = new WrappedContext[multiThreadLevel];
 
   for (int i = 0; i < multiThreadLevel; i++)
   {
@@ -71,6 +68,7 @@ void getJobState (JobHandle job, JobState *state)
 
 void closeJobHandle (JobHandle job) // to fill?
 {
+  waitForJob (job);
   auto context = static_cast<JobContext *>(job);
   delete context;
   delete[] threads_list;
@@ -85,7 +83,7 @@ void waitForJob (JobHandle job)
   auto context = static_cast<JobContext *>(job);
   for (int i = 1; i < context->num_of_threads; i++)
   {
-    if (0 != pthread_join (threads_list[i], NULL))
+    if (0 != pthread_join (threads_list[i], nullptr))
     {
       fprintf (stderr, "Error: Failure to join threads in run.\n");
       exit (1);
@@ -225,7 +223,7 @@ void *run_job (void *wrapped_context)
     context->shuffle_atomic_counter = 0;
     for (int i = 0; i < context->num_of_threads; ++i)
     {
-      if (context->thread_intermediate_vecs[i].size () == 0)
+      if (context->thread_intermediate_vecs[i].empty())
       {
         context->thread_intermediate_vecs.erase
             (context->thread_intermediate_vecs.begin () + i);
@@ -284,6 +282,9 @@ void *run_job (void *wrapped_context)
             //remove from thread_intermediate_vecs the current ind
             context->thread_intermediate_vecs.erase
                 (context->thread_intermediate_vecs.begin () + i);
+            i--;
+          }
+          else {
             i--;
           }
         }
