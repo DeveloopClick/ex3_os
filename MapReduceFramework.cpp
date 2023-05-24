@@ -5,9 +5,8 @@
 #include "JobContext.h"
 #include <cmath>
 #include <pthread.h>
-
+#include <iostream>
 pthread_t *threads_list;
-int flag_wait = 0;
 
 struct WrappedContext
 {
@@ -68,28 +67,33 @@ void getJobState (JobHandle job, JobState *state)
 
 void closeJobHandle (JobHandle job) // to fill?
 {
-  waitForJob (job);
-  auto context = static_cast<JobContext *>(job);
+  auto context=static_cast<JobContext *>(job);
+  if (context->closed_atomic_counter
+      != context->num_of_threads)
+  {
+    waitForJob (job);
+  }
   delete context;
   delete[] threads_list;
 }
 
 void waitForJob (JobHandle job)
 {
-  if (flag_wait == 1)
+  auto context = static_cast<JobContext *>(job);
+
+  if (context->flag_waited == 1)
   {
     return;
   }
-  auto context = static_cast<JobContext *>(job);
   for (int i = 1; i < context->num_of_threads; i++)
   {
-    if (0 != pthread_join (threads_list[i], nullptr))
+    if (pthread_join (threads_list[i], nullptr)!=0)
     {
       fprintf (stderr, "Error: Failure to join threads in run.\n");
       exit (1);
     }
   }
-  flag_wait = 1;
+  context->flag_waited = 1;
 }
 
 void emit2 (K2 *key, V2 *value, void *context)
@@ -202,9 +206,7 @@ void *run_job (void *wrapped_context)
 
 //  int first = context->first_to_shuffle++;
 // decided by last
-  pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
-  pthread_mutex_t shuffleMutex;
-  if (pthread_mutex_lock (&shuffleMutex) != 0)
+  if (pthread_mutex_lock (&context->shuffleMutex) != 0)
   {
     fprintf (stderr, "[[ShuffleBarrier]] error on pthread_mutex_lock");
     exit (1);
@@ -212,7 +214,7 @@ void *run_job (void *wrapped_context)
 
   if (++context->shuffle_atomic_counter < context->num_of_threads)
   {
-    if (pthread_cond_wait (&cv, &shuffleMutex) != 0)
+    if (pthread_cond_wait (&context->cv, &context->shuffleMutex) != 0)
     {
       fprintf (stderr, "[[ShuffleBarrier]] error on pthread_cond_wait");
       exit (1);
@@ -223,7 +225,7 @@ void *run_job (void *wrapped_context)
     context->shuffle_atomic_counter = 0;
     for (int i = 0; i < context->num_of_threads; ++i)
     {
-      if (context->thread_intermediate_vecs[i].empty())
+      if (context->thread_intermediate_vecs[i].empty ())
       {
         context->thread_intermediate_vecs.erase
             (context->thread_intermediate_vecs.begin () + i);
@@ -284,7 +286,8 @@ void *run_job (void *wrapped_context)
                 (context->thread_intermediate_vecs.begin () + i);
             i--;
           }
-          else {
+          else
+          {
             i--;
           }
         }
@@ -294,27 +297,18 @@ void *run_job (void *wrapped_context)
       context->our_queue.push_back (s_vec);
     }
 
-    if (pthread_cond_broadcast (&cv) != 0)
+    if (pthread_cond_broadcast (&context->cv) != 0)
     {
       fprintf (stderr, "[[ShuffleBarrier]] error on pthread_cond_broadcast");
       exit (1);
     }
   }
-
-  if (pthread_cond_destroy (&cv) != 0)
-  {
-    fprintf (stderr, "[[Barrier]] error on pthread_cond_destroy");
-    exit (1);
-  }
-  if (pthread_mutex_unlock (&shuffleMutex) != 0)
+  if (pthread_mutex_unlock (&context->shuffleMutex) != 0)
   {
     fprintf (stderr, "[[ShuffleBarrier]] error on pthread_mutex_unlock");
     exit (1);
   }
-  if (pthread_mutex_destroy(&shuffleMutex) != 0){
-    fprintf(stderr, "[[Barrier]] error on pthread_mutex_destroy");
-    exit(1);
-  }
+
   /**REDUCE**/
   context->state.stage = REDUCE_STAGE;
   if (context->first_to_reduce++ == 0)
@@ -345,5 +339,6 @@ void *run_job (void *wrapped_context)
   }
   //TODO: this is a plaster - remove!
   context->state.percentage = std::round (context->state.percentage);
+  context->closed_atomic_counter++;
   return nullptr;
 }
