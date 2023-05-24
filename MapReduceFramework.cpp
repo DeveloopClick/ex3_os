@@ -241,7 +241,7 @@ void *run_job (void *wrapped_context)
     {
       int max_ind = 0;
       auto vec_of_max_pair = &context->thread_intermediate_vecs[0];
-      for (int i = 1; i < context->num_of_threads; ++i)
+      for (int i = 1; i < context->thread_intermediate_vecs.size (); ++i)
       {
         auto vec = &context->thread_intermediate_vecs[i];
         if (!vec->empty ()
@@ -270,7 +270,7 @@ void *run_job (void *wrapped_context)
       for (int i = 0; i < context->thread_intermediate_vecs.size (); ++i)
       {
         auto vec = &context->thread_intermediate_vecs[i];
-        if (!vec->empty () && !((*s_vec.back ().first < *vec->back ().first)
+        while (!vec->empty () && !((*s_vec.back ().first < *vec->back ().first)
                                 || (*vec->back ().first <
                                     *s_vec.back ().first)))
         {
@@ -279,17 +279,13 @@ void *run_job (void *wrapped_context)
           context->state.percentage += 100 * (1 /
                                               float (context->num_of_intermediate_pairs));
           vec->pop_back ();
-          if (vec->empty ())
-          {
-            //remove from thread_intermediate_vecs the current ind
-            context->thread_intermediate_vecs.erase
-                (context->thread_intermediate_vecs.begin () + i);
-            i--;
-          }
-          else
-          {
-            i--;
-          }
+        }
+        if (vec->empty ())
+        {
+          //remove from thread_intermediate_vecs the current ind
+          context->thread_intermediate_vecs.erase
+              (context->thread_intermediate_vecs.begin () + i);
+          i--;
         }
       }
 //      std::cout << "pushed" << std::endl;
