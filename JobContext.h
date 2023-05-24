@@ -19,20 +19,27 @@ class JobContext
  public:
 
   std::atomic<unsigned long> map_atomic_counter;
-//  std::atomic<unsigned long> shuffle_atomic_counter;
+  std::atomic<unsigned long> shuffle_atomic_counter;
   std::atomic<unsigned long> reduce_atomic_counter;
 
   const InputVec &inputVec;
   const MapReduceClient &client;
   OutputVec &outputVec;
   std::vector<IntermediateVec> our_queue;
-  IntermediateVec *thread_intermediate_vecs;
+  std::vector<IntermediateVec> thread_intermediate_vecs;
   int thread_index;
-  int num_of_intermediate_vecs;
+  int num_of_threads;
+  int num_of_intermediate_pairs;
   JobState state;
   pthread_mutex_t inVecMutex;
-  pthread_mutex_t shuffleMutex;
+//  pthread_mutex_t shuffleMutex;
   pthread_mutex_t outVecMutex;
+  pthread_mutex_t emit2Mutex;
+  pthread_mutex_t emit3Mutex;
+  pthread_mutex_t jobStateMutex;
+  pthread_mutex_t sortMutex;
+
+
   int first_to_map;
   int first_to_shuffle;
   int first_to_reduce;
