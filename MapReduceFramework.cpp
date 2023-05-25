@@ -145,11 +145,24 @@ void *run_job (void *wrapped_context)
   JobContext *context = static_cast<WrappedContext *> (wrapped_context)->context;
 
   /**MAP**/
+  if (pthread_mutex_lock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
+  }
   context->state.stage = MAP_STAGE;
   if (context->first_to_map++ == 0)
   {
     context->state.percentage = 0;
   }
+  if (pthread_mutex_unlock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
+  }
+
 
   unsigned long old_value = 0;
   while ((old_value = context->map_atomic_counter++)
@@ -165,8 +178,9 @@ void *run_job (void *wrapped_context)
     context->client.map (context->inputVec[old_value].first,
                          context->inputVec[old_value].second,
                          context);
-    context->state.percentage += 100 * (1 / float (context->inputVec
-                                                       .size ()));
+    context->state.percentage = std::min(float(100),context->state
+    .percentage + 100 * (1 / float (context->inputVec
+                                                       .size ())));
     context->thread_index = -1;
     if (pthread_mutex_unlock (&(context->inVecMutex)) != 0)
     {
@@ -198,10 +212,22 @@ void *run_job (void *wrapped_context)
   context->barrier.barrier ();
 
   /**SHUFFLE**/
+  if (pthread_mutex_lock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
+  }
   context->state.stage = SHUFFLE_STAGE;
   if (context->first_to_shuffle++ == 0)
   {
     context->state.percentage = 0;
+  }
+  if (pthread_mutex_unlock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
   }
 
 //  int first = context->first_to_shuffle++;
@@ -256,9 +282,11 @@ void *run_job (void *wrapped_context)
       IntermediateVec s_vec = IntermediateVec ();
 //      std::cout << vec_of_max_pair->back ().first << std::endl;
       s_vec.push_back (vec_of_max_pair->back ());
-      context->state.percentage += 100 * (1 /
+      context->state.percentage =std::min(float(100),context->state
+          .percentage + 100 *
+          (1 /
                                           float
-                                              (context->num_of_intermediate_pairs));
+                                              (context->num_of_intermediate_pairs)));
       vec_of_max_pair->pop_back ();
       if (vec_of_max_pair->empty ())
       {
@@ -276,8 +304,11 @@ void *run_job (void *wrapped_context)
         {
 //          std::cout << vec_of_max_pair->back ().first << std::endl;
           s_vec.push_back (vec->back ());
-          context->state.percentage += 100 * (1 /
-                                              float (context->num_of_intermediate_pairs));
+          context->state.percentage = std::min(float(100),context->state
+          .percentage +100 * (1 /
+                                              float
+                                              (context->num_of_intermediate_pairs)));
+
           vec->pop_back ();
         }
         if (vec->empty ())
@@ -306,10 +337,22 @@ void *run_job (void *wrapped_context)
   }
 
   /**REDUCE**/
+  if (pthread_mutex_lock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
+  }
   context->state.stage = REDUCE_STAGE;
   if (context->first_to_reduce++ == 0)
   {
     context->state.percentage = 0;
+  }
+  if (pthread_mutex_unlock (&(context->jobStateMutex))
+      != 0)
+  {
+    fprintf (stderr, "Error: Failure to lock the mutex in emit3.\n");
+    exit (1);
   }
 
   old_value = 0;
@@ -323,10 +366,10 @@ void *run_job (void *wrapped_context)
     }
     context->client.reduce (&context->our_queue[old_value],
                             context);
-    context->state.percentage +=
+    context->state.percentage =std::min(float(100),context->state.percentage +
         100 * (float (context->our_queue[old_value].size
             ())
-               / float (context->num_of_intermediate_pairs));
+               / float (context->num_of_intermediate_pairs)));
     if (pthread_mutex_unlock (&(context->outVecMutex)) != 0)
     {
       fprintf (stderr, "Error: Failure to unlock the mutex in emit3.\n");
@@ -334,7 +377,7 @@ void *run_job (void *wrapped_context)
     }
   }
   //TODO: this is a plaster - remove!
-  context->state.percentage = std::round (context->state.percentage);
+//  context->state.percentage = std::round (context->state.percentage);
   context->closed_atomic_counter++;
   return nullptr;
 }
