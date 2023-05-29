@@ -81,6 +81,5 @@ JobContext::~JobContext ()
     fprintf(stderr, "[[Barrier]] error on pthread_cond_destroy");
     exit(1);
   }
-//  delete[] thread_intermediate_vecs;
 }
 
