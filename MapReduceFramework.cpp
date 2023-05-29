@@ -6,13 +6,6 @@
 #include <cmath>
 #include <pthread.h>
 #include <iostream>
-pthread_t *threads_list;
-
-struct WrappedContext
-{
-    JobContext *context;
-    int current_thread_ind;
-};
 
 void *run_job (void *wrapped_context);
 
@@ -28,18 +21,17 @@ JobHandle startMapReduceJob (const MapReduceClient &client,
   }
 
   auto *context = new JobContext (client, inputVec, outputVec, multiThreadLevel);
-  threads_list = new pthread_t[multiThreadLevel];
-  auto *context_vec = new WrappedContext[multiThreadLevel];
-
+  context->threads_list.reserve(multiThreadLevel);
+  context->context_vec.reserve(multiThreadLevel);
   for (int i = 0; i < multiThreadLevel; i++)
   {
-    context_vec[i] = {context, i};
+    context->context_vec[i] = {context, i};
   }
 
   for (int i = 0; i < multiThreadLevel; i++)
   {
-    if (0 != pthread_create (&threads_list[i], nullptr, run_job,
-                             static_cast<void *>(&context_vec[i])))
+    if (0 != pthread_create (&context->threads_list[i], nullptr, run_job,
+                             static_cast<void *>(&context->context_vec[i])))
     {
       std::cout << "Error: Failure to spawn new thread in run.\n" << std::endl;
       exit (1);
@@ -76,7 +68,6 @@ void closeJobHandle (JobHandle job) // to fill?
     waitForJob (job);
   }
   delete context;
-  delete[] threads_list;
 }
 
 void waitForJob (JobHandle job)
@@ -89,7 +80,7 @@ void waitForJob (JobHandle job)
   }
   for (int i = 1; i < context->num_of_threads; i++)
   {
-    if (pthread_join (threads_list[i], nullptr) != 0)
+    if (pthread_join (context->threads_list[i], nullptr) != 0)
     {
       std::cout << "Error: Failure to join threads in run.\n" << std::endl;
       exit (1);
@@ -169,7 +160,12 @@ void *run_job (void *wrapped_context)
   while ((old_value = context->map_atomic_counter++)
          < context->inputVec.size ())
   {
-
+    if (pthread_mutex_lock (&(context->jobStateMutex))
+        != 0)
+    {
+      std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
+      exit (1);
+    }
     if (pthread_mutex_lock (&(context->inVecMutex)) != 0)
     {
       std::cout << "Error: Failure to unlock the mutex in 9.\n" << std::endl;
@@ -188,6 +184,12 @@ void *run_job (void *wrapped_context)
     if (pthread_mutex_unlock (&(context->inVecMutex)) != 0)
     {
       std::cout << "Error: Failure to unlock the mutex in 10.\n" << std::endl;
+      exit (1);
+    }
+    if (pthread_mutex_unlock (&(context->jobStateMutex))
+        != 0)
+    {
+      std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
       exit (1);
     }
   }
@@ -285,12 +287,24 @@ void *run_job (void *wrapped_context)
       IntermediateVec s_vec = IntermediateVec ();
 //      std::cout << vec_of_max_pair->back ().first << std::endl;
       s_vec.push_back (vec_of_max_pair->back ());
+      if (pthread_mutex_lock (&(context->jobStateMutex))
+          != 0)
+      {
+        std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
+        exit (1);
+      }
       context->state.percentage = std::min (float (100), context->state
                                                              .percentage
                                                          + 100 *
                                                            (1 /
                                                             float
                                                                 (context->num_of_intermediate_pairs)));
+      if (pthread_mutex_unlock (&(context->jobStateMutex))
+          != 0)
+      {
+        std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
+        exit (1);
+      }
       vec_of_max_pair->pop_back ();
       if (vec_of_max_pair->empty ())
       {
@@ -342,10 +356,11 @@ void *run_job (void *wrapped_context)
   }
 
   /**REDUCE**/
-  if (pthread_mutex_lock (&(context->jobStateMutex))
+  if (int a = pthread_mutex_lock (&(context->jobStateMutex))
       != 0)
   {
-    std::cout << "Error: Failure to unlock the mutex in 15.\n" << std::endl;
+    std::cout << "Error: Failure to unlock the mutex in 15.\n" << a<<
+    std::endl;
     exit (1);
   }
   if (context->first_to_reduce++ == 0)
@@ -364,6 +379,12 @@ void *run_job (void *wrapped_context)
   while ((old_value = context->reduce_atomic_counter++)
          < context->our_queue.size ())
   {
+    if (pthread_mutex_lock (&(context->jobStateMutex))
+        != 0)
+    {
+      std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
+      exit (1);
+    }
     if (pthread_mutex_lock (&(context->outVecMutex)) != 0)
     {
       std::cout << "Error: Failure to unlock the mutex in 17.\n" << std::endl;
@@ -382,6 +403,12 @@ void *run_job (void *wrapped_context)
     if (pthread_mutex_unlock (&(context->outVecMutex)) != 0)
     {
       std::cout << "Error: Failure to unlock the mutex in 18.\n" << std::endl;
+      exit (1);
+    }
+    if (pthread_mutex_unlock (&(context->jobStateMutex))
+        != 0)
+    {
+      std::cout << "Error: Failure to unlock the mutex in 8.\n" << std::endl;
       exit (1);
     }
   }

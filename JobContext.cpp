@@ -26,6 +26,7 @@ JobContext::JobContext (const MapReduceClient &client,
       first_to_map (0),
       first_to_shuffle (0),
       first_to_reduce (0)
+
 {
 //  this->thread_intermediate_vecs = new
 //      IntermediateVec[num_of_intermediate_vecs];

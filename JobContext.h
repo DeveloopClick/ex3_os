@@ -14,6 +14,8 @@
 #include <cstdlib>
 #include <pthread.h>
 
+struct WrappedContext;
+
 class JobContext
 {
  public:
@@ -42,8 +44,8 @@ class JobContext
   pthread_mutex_t jobStateMutex;
   pthread_mutex_t sortMutex;
   pthread_cond_t cv;
-
-
+  std::vector<pthread_t> threads_list;
+  std::vector<WrappedContext> context_vec;
 
   int first_to_map;
   int first_to_shuffle;
@@ -55,4 +57,11 @@ class JobContext
   ~JobContext ();
 
 };
+
+struct WrappedContext
+{
+    JobContext *context;
+    int current_thread_ind;
+};
+
 #endif //_JOB_CONTEXT_H_
