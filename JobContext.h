@@ -20,11 +20,10 @@ class JobContext
 {
  public:
 
-  std::atomic<unsigned long> map_atomic_counter;
-  std::atomic<unsigned long> shuffle_atomic_counter;
-  std::atomic<unsigned long> reduce_atomic_counter;
-  std::atomic<unsigned long> closed_atomic_counter;
-
+  std::atomic<unsigned long>* map_atomic_counter;
+  std::atomic<unsigned long>* shuffle_atomic_counter;
+  std::atomic<unsigned long>* reduce_atomic_counter;
+  std::atomic<unsigned long>* closed_atomic_counter;
 
   const MapReduceClient &client;
   const InputVec &inputVec;
@@ -38,15 +37,17 @@ class JobContext
   int num_of_threads;
   int num_of_intermediate_pairs;
 
-  std::atomic_flag flag_waited;
-  std::atomic_flag flag_map;
-  std::atomic_flag flag_shuffle;
-  std::atomic_flag flag_reduce;
+  std::atomic_flag flag_waited = ATOMIC_FLAG_INIT;
+  std::atomic_flag flag_map = ATOMIC_FLAG_INIT;
+  std::atomic_flag flag_shuffle = ATOMIC_FLAG_INIT;
+  std::atomic_flag flag_reduce = ATOMIC_FLAG_INIT;
 
   JobState state;
   pthread_mutex_t emit3Mutex;
+  pthread_mutex_t emit2Mutex;
   pthread_mutex_t jobStateMutex;
   Barrier *barrier;
+  // Barrier *barrier2;
 
   JobContext (const MapReduceClient &client,
               const InputVec &inputVec, OutputVec &outputVec,
